@@ -1,24 +1,20 @@
 pub type Data = Vec<u8>;
-pub type ConnDescriptor = Vec<Vec<usize>>; // B_inp -> A_outs
 
 pub trait Computer {
-    fn set_input_vals(&mut self, data: &Data, conn_descriptor: &ConnDescriptor);
-    fn compute(&self) -> Data;
+    fn input_pins_num(&self) -> usize;
+    fn compute(&mut self, data: &Data) -> Data;
 }
 
-pub struct Graph<'a> {
+pub struct Graph {
     adj_mtrx:               Vec<Vec<bool>>,
     nodes:                  Vec<Box<dyn Computer>>,
-    node_conn_descriptors:  Vec<ConnDescriptor>,
-
-    node_vals:              Vec<Option<&'a Data>>,
+    node_vals:              Vec<Option<Data>>,
 }
 
 impl Graph {
     pub fn new(
         adj_mtrx: Vec<Vec<bool>>,
         nodes: Vec<Box<dyn Computer>>,
-        node_conn_descriptors: Vec<ConnDescriptor>,
     ) -> Self {
         if adj_mtrx.len() != nodes.len() {
             panic!("adj_mtrx and nodes lens mismatch")
@@ -28,14 +24,12 @@ impl Graph {
             panic!("zero size not allowed")
         }
 
-        let node_vals =
-            vec![Option::None; adj_mtrx.len()];
+        let node_vals = vec![None; nodes.len()];
 
         Self {
             adj_mtrx,
             nodes,
-            node_conn_descriptors,
-            node_vals
+            node_vals,
         }
     }
 
@@ -68,92 +62,71 @@ impl Graph {
         nodes
     }
 
-    fn compute_node(&self, node: usize) {
+    fn compute_initial_nodes(&mut self, data: &Data) {
+        let initial_nodes = self.find_terminal_nodes(true);
+
+        let mut current_start: usize = 0;
+        for i in initial_nodes {
+            let pins_num = self.nodes[i].input_pins_num();
+            let current_end = current_start + pins_num;
+            let input_data = data[current_start..current_end].to_vec();
+            current_start = current_end;
+            let input_activation = self.nodes[i].compute(&input_data);
+            let _ = self.node_vals[i].insert(input_activation);
+        }
+    }
+
+    fn compute_node(&mut self, node: usize) {
         if self.node_vals[node] != None {
             return;
         }
 
         let predecessors = self.find_predecessors(node);
-        for i in predecessors {
+
+        if predecessors.len() == 0 {
+            panic!("uninitialized graph")
+        }
+
+        let mut predecessors_data = Data::new();
+
+        for &i in &predecessors {
             if self.node_vals[i] == None {
                 self.compute_node(i);
             }
-            let predecessor_data = self.node_vals[i].unwrap();
-            let conn_descriptor = &self.node_conn_descriptors[i];
-            self.nodes[i].set_input_vals(predecessor_data, conn_descriptor);
         }
-        self.node_vals[node] = Some(&self.nodes[node].compute());
+
+        for &i in &predecessors {
+            let data = self.node_vals[i].as_ref().unwrap();
+            predecessors_data.append(&mut Vec::clone(data));
+        }
+        let node_val = self.nodes[node].compute(&predecessors_data);
+        let _ = self.node_vals[node].insert(node_val);
     }
 }
 
 impl Computer for Graph {
-    fn set_input_vals(&mut self, data: &Data, conn_descriptor: &ConnDescriptor) {
-        let input_nodes= self.find_terminal_nodes(true);
+    fn input_pins_num(&self) -> usize {
+        let mut count: usize = 0;
+        let input_nodes = self.find_terminal_nodes(true);
 
         for i in input_nodes {
-            let idxes = &conn_descriptor[i];
-            let view: Data = idxes.iter().map(|&i| &data[i]).collect();
-            self.node_vals[i] = Some(&view);
+            count += self.nodes[i].input_pins_num();
         }
+        count
     }
 
-    fn compute(&self) -> Data {
+    fn compute(&mut self, data: &Data) -> Data {
+        self.compute_initial_nodes(data);
+
         let output_nodes = self.find_terminal_nodes(false);
-        for o in output_nodes {
+        for &o in &output_nodes {
             self.compute_node(o);
         }
+
         let mut output = Data::new();
-        let output_nodes = self.find_terminal_nodes(false);
-        for o in output_nodes {
-            output.append(&mut self.node_vals[o].unwrap());
+        for &o in &output_nodes {
+            output.append(&mut Vec::clone(self.node_vals[o].as_ref().unwrap()));
         }
         output
-    }
-}
-
-pub mod fundamental_computers {
-    use crate::computation_graph::{Computer, ConnDescriptor, Data};
-
-    pub struct Nand<'a> {
-        inp1: Option<&'a Data>,
-        inp2: Option<&'a Data>,
-    }
-
-    impl Nand {
-        fn new() -> Self {
-            Self {
-                inp1: None,
-                inp2: None,
-            }
-        }
-    }
-
-    impl Computer for Nand {
-        fn set_input_vals(&mut self, data: &Data, conn_descriptor: &ConnDescriptor) {
-            if conn_descriptor.len() != 2 {
-                panic!("specified incorrect number of target inputs")
-            }
-            if conn_descriptor[0].len() != conn_descriptor[1].len() {
-                panic!("input sizes mismatch")
-            }
-
-            let view1: &Data = conn_descriptor[0].iter().map(
-                |&i| &data[i]
-            ).collect();
-            let view2: &Data = conn_descriptor[1].iter().map(
-                |&i| &data[i]
-            ).collect();
-
-            self.inp1 = Some(view1);
-            self.inp2 = Some(view2);
-        }
-
-        fn compute(&self) -> Data {
-            let outp = Data::with_capacity(self.inp1.len());
-            for i in 0..outp.len() {
-                outp[i] = !(self.inp1[i] && self.inp2[i]);
-            }
-            outp
-        }
     }
 }
