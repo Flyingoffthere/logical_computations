@@ -1,4 +1,5 @@
 mod computation_graph;
+mod common_computers;
 
 #[cfg(test)]
 mod tests {
@@ -39,5 +40,32 @@ mod tests {
             assert_eq!(g.input_pins_num(), 4);
             assert_eq!(g.compute(&inps), vec![1]);
         }
+    }
+
+    mod nand_tests {
+        use crate::common_computers::NAND;
+        use crate::computation_graph::Computer;
+
+        fn create_nand() -> Box<dyn Computer> {
+            Box::new(NAND::new())
+        }
+
+        #[test]
+        fn test_nands_unit_bit() {
+            let mut nand = create_nand();
+
+            let inp = vec![1, 1];
+            assert_eq!(vec![0], nand.compute(&inp));
+
+            let inp = vec![1, 0];
+            assert_eq!(vec![1], nand.compute(&inp));
+
+            let inp = vec![0, 1];
+            assert_eq!(vec![1], nand.compute(&inp));
+
+            let inp = vec![0, 0];
+            assert_eq!(vec![1], nand.compute(&inp));
+        }
+
     }
 }
