@@ -65,7 +65,30 @@ mod tests {
 
             let inp = vec![0, 0];
             assert_eq!(vec![1], nand.compute(&inp));
+
+            let inp = vec![0, 1,
+                                    1, 0];
+            assert_eq!(vec![1, 1], nand.compute(&inp));
+        }
+    }
+
+    mod not_tests {
+        use crate::common_computers::NOT;
+        use crate::computation_graph::{Computer, Data};
+
+        fn create_not() -> Box<dyn Computer> {
+            Box::new(NOT::new())
         }
 
+        #[test]
+        fn test_not() {
+            let mut not = create_not();
+
+            let inp: Data = vec![0];
+            assert_eq!(not.compute(&inp), vec![1]);
+
+            let inp: Data = vec![1];
+            assert_eq!(not.compute(&inp), vec![0]);
+        }
     }
 }

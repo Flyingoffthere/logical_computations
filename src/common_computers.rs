@@ -1,4 +1,4 @@
-use super::computation_graph::{Computer, Data};
+use super::computation_graph::{Computer, Data, Graph};
 
 pub struct NAND{}
 
@@ -29,4 +29,34 @@ impl Computer for NAND {
 
         out
      }
+}
+
+pub struct NOT {
+    backbone: Graph,
+}
+
+impl NOT {
+    pub fn new() -> Self {
+        let adj_mtrx = vec![vec![false]];
+        let nand: Box<dyn Computer> = Box::new(NAND::new());
+        let nodes = vec![nand];
+        let g = Graph::new(adj_mtrx, nodes);
+
+        Self {
+            backbone: g
+        }
+    }
+}
+
+impl Computer for NOT {
+    fn input_pins_num(&self) -> usize {
+        1
+    }
+
+    fn compute(&mut self, data: &Data) -> Data {
+        let mut inp = data.clone();
+        let mut inp_cloned = data.clone();
+        inp.append(&mut inp_cloned);
+        self.backbone.compute(&inp)
+    }
 }
